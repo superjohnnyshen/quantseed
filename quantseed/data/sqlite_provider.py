@@ -1,5 +1,6 @@
 import sqlite3
 import pandas as pd
+from contextlib import closing
 from typing import List, Optional
 from .interface import DataProvider
 
@@ -29,13 +30,15 @@ class SQLiteProvider(DataProvider):
             AND trade_date <= ?
             ORDER BY trade_date, code
         """
-        with self._connect() as conn:
+        # closing() 确保 with 块退出时关闭连接
+        # sqlite3.Connection 的 with 只管理事务，不关闭连接
+        with closing(self._connect()) as conn:
             df = pd.read_sql_query(query, conn, params=codes + [start_date, end_date])
         return df
 
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 df = pd.read_sql_query("SELECT code, name, list_date, delist_date FROM stock_basic", conn)
             df['code'] = df['code'].astype(str).str.zfill(6)
             self._stock_basic_cache = df
@@ -53,7 +56,7 @@ class SQLiteProvider(DataProvider):
             AND trade_date <= ?
             ORDER BY trade_date
         """
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             df = pd.read_sql_query(query, conn, params=[index_code, start_date, end_date])
         return df
 
@@ -66,7 +69,7 @@ class SQLiteProvider(DataProvider):
             WHERE code IN ({placeholders})
             AND report_date = ?
         """
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             df = pd.read_sql_query(query, conn, params=codes + [date])
         return df
 
@@ -77,7 +80,7 @@ class SQLiteProvider(DataProvider):
             AND trade_date <= ?
             ORDER BY trade_date
         """
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             df = pd.read_sql_query(query, conn, params=[start_date, end_date])
         return df['trade_date'].tolist()
 
@@ -88,7 +91,7 @@ class SQLiteProvider(DataProvider):
             ORDER BY trade_date DESC
             LIMIT 1
         """
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             df = pd.read_sql_query(query, conn, params=[str(code).zfill(6)])
         if not df.empty:
             return float(df.iloc[0]['close'])

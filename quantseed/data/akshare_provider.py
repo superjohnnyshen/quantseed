@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 class AkShareProvider(DataProvider):
     def __init__(self):
         self._stock_basic_cache = None
+        self._spot_cache = None
+        self._spot_cache_time = 0
 
     def get_daily_prices(
         self,
@@ -103,9 +105,15 @@ class AkShareProvider(DataProvider):
         return df['trade_date'].tolist()
 
     def get_latest_price(self, code: str) -> float:
-        df = ak.stock_zh_a_spot_em()
-        df['代码'] = df['代码'].astype(str).str.zfill(6)
-        row = df[df['代码'] == str(code).zfill(6)]
+        # 缓存全市场实时行情 60 秒，避免每次调用都下载 5000+ 股票数据
+        import time
+        now = time.time()
+        if self._spot_cache is None or (now - self._spot_cache_time) > 60:
+            df = ak.stock_zh_a_spot_em()
+            df['代码'] = df['代码'].astype(str).str.zfill(6)
+            self._spot_cache = df
+            self._spot_cache_time = now
+        row = self._spot_cache[self._spot_cache['代码'] == str(code).zfill(6)]
         if not row.empty:
             return float(row.iloc[0]['最新价'])
         return 0.0

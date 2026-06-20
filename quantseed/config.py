@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-DATA_PROVIDER = os.getenv("QUANTSEED_DATA_PROVIDER", "akshare")
+DATA_PROVIDER = os.getenv("QUANTSEED_DATA_PROVIDER", "akshare").lower()
 TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
 QMT_DATA_PATH = os.getenv("QMT_DATA_PATH", "quantseed_data.db")
 
@@ -23,8 +23,8 @@ OUTPUT_DIR = Path(os.getenv("QUANTSEED_OUTPUT_DIR", "output"))
 
 
 def get_data_provider():
-    provider_type = DATA_PROVIDER.lower()
-    
+    provider_type = DATA_PROVIDER
+
     if provider_type == "tushare":
         from .data.tushare_provider import TushareProvider
         if not TUSHARE_TOKEN:

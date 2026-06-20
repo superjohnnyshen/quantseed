@@ -5,7 +5,6 @@
 """
 import json
 import logging
-import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,8 @@ class StateStore:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(self.state_path)  # 原子替换
         self._cache = data
-        self._mtime = time.time()
+        # 用文件实际 mtime，确保后续 load() 缓存命中
+        self._mtime = self.state_path.stat().st_mtime
 
     def update(self, **kwargs):
         data = self.load()
