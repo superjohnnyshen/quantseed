@@ -30,15 +30,39 @@ class EquityTracker:
                     "qty", "amount", "strategy", "note",
                 ])
 
-    def record_equity(self, total_equity, cash, stock_value, positions, pnl_daily=0.0):
-        today = datetime.date.today().strftime("%Y-%m-%d")
+    def record_equity(self, total_equity, cash, stock_value, positions, pnl_daily=0.0, date=None):
+        """记录当日净值。
+
+        Args:
+            date: 可选日期。实盘默认今天，回测应传入当日的 date/datetime。
+                  接受 datetime.date / datetime.datetime / 'YYYY-MM-DD' 字符串。
+        """
+        if date is None:
+            date_str = datetime.date.today().strftime("%Y-%m-%d")
+        elif isinstance(date, str):
+            date_str = date
+        elif isinstance(date, datetime.datetime):
+            date_str = date.strftime("%Y-%m-%d")
+        else:  # datetime.date
+            date_str = date.strftime("%Y-%m-%d")
         self._append_csv(self.equity_path, [
-            today, round(total_equity, 2), round(cash, 2),
+            date_str, round(total_equity, 2), round(cash, 2),
             round(stock_value, 2), positions, round(pnl_daily, 2),
         ])
 
-    def record_trade(self, code, name, action, price, qty, strategy, note=""):
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def record_trade(self, code, name, action, price, qty, strategy, note="", dt=None):
+        """记录一笔交易。
+
+        Args:
+            dt: 可选时间戳。实盘默认现在，回测应传入当时的 datetime。
+                接受 datetime.datetime / 'YYYY-MM-DD HH:MM:SS' 字符串。
+        """
+        if dt is None:
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elif isinstance(dt, str):
+            now = dt
+        else:  # datetime.datetime
+            now = dt.strftime("%Y-%m-%d %H:%M:%S")
         amount = price * qty
         self._append_csv(self.trades_path, [
             now, code, name, action, price, qty, amount, strategy, note,

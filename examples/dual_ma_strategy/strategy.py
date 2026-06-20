@@ -82,9 +82,10 @@ class DualMAStrategy(BaseStrategy):
         self._execute_sells(now)
 
     def on_close(self, now: datetime.datetime):
-        """14:45 尾盘：扫描信号，记录买入/卖出计划。"""
+        """14:45 尾盘：扫描信号 + 执行买入（先扫信号，再用当日收盘价买入）。"""
         self.log(f"尾盘 [{now.strftime('%H:%M')}] - 计算双均线信号")
         self._scan_signals(now)
+        self._execute_buys(now)
 
     def on_eod(self, now: datetime.datetime):
         """15:05 日终：记录净值。"""
@@ -202,6 +203,7 @@ class DualMAStrategy(BaseStrategy):
                 qty=qty,
                 strategy=self.name,
                 note=f"卖出 {qty} 股 @ {price}",
+                dt=now,
             )
             self.log(f"  卖出 {code}: {qty} 股 @ {price:.2f} = {amount:.2f}")
 
@@ -259,6 +261,7 @@ class DualMAStrategy(BaseStrategy):
                 qty=qty,
                 strategy=self.name,
                 note=f"买入 {qty} 股 @ {price}",
+                dt=now,
             )
             self.log(f"  买入 {code}: {qty} 股 @ {price:.2f} = {amount:.2f}")
 
@@ -296,6 +299,7 @@ class DualMAStrategy(BaseStrategy):
             stock_value=stock_value,
             positions=len(positions),
             pnl_daily=pnl_daily,
+            date=now,
         )
         # 更新 last_equity 供明日使用
         self.state.update(last_equity=total_equity)

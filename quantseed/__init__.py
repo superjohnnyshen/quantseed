@@ -14,9 +14,11 @@ from .state_store import StateStore
 from .trading import TradingAPI
 from .data import DataProvider, AkShareProvider, TushareProvider, SQLiteProvider
 from .config import get_data_provider, DATA_PROVIDER
+from .backtest import Backtester, BacktestConfig, BacktestResult
 
 __all__ = [
     'BaseStrategy', 'Scheduler', 'EquityTracker', 'StateStore',
     'TradingAPI', 'DataProvider', 'AkShareProvider',
-    'TushareProvider', 'SQLiteProvider', 'get_data_provider', 'DATA_PROVIDER'
+    'TushareProvider', 'SQLiteProvider', 'get_data_provider', 'DATA_PROVIDER',
+    'Backtester', 'BacktestConfig', 'BacktestResult',
 ]
