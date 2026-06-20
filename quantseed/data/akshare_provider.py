@@ -1,16 +1,15 @@
 import akshare as ak
 import pandas as pd
+import logging
 from typing import List, Optional
 from .interface import DataProvider
+
+logger = logging.getLogger(__name__)
 
 
 class AkShareProvider(DataProvider):
     def __init__(self):
         self._stock_basic_cache = None
-
-    def get_all_codes(self) -> List[str]:
-        df = self.get_stock_basic()
-        return df['code'].tolist()
 
     def get_daily_prices(
         self,
@@ -45,7 +44,8 @@ class AkShareProvider(DataProvider):
                     })
                     df['trade_date'] = df['trade_date'].astype(str)
                     all_data.append(df)
-            except Exception:
+            except Exception as e:
+                logger.warning("获取 %s 日线数据失败: %s", code, e)
                 continue
         if not all_data:
             return pd.DataFrame()
@@ -89,7 +89,8 @@ class AkShareProvider(DataProvider):
                 if not df.empty:
                     df['code'] = code
                     all_data.append(df)
-            except Exception:
+            except Exception as e:
+                logger.warning("获取 %s 基本面数据失败: %s", code, e)
                 continue
         if not all_data:
             return pd.DataFrame()

@@ -1,7 +1,10 @@
 import tushare as ts
 import pandas as pd
+import logging
 from typing import List, Optional
 from .interface import DataProvider
+
+logger = logging.getLogger(__name__)
 
 
 class TushareProvider(DataProvider):
@@ -10,9 +13,22 @@ class TushareProvider(DataProvider):
         self._pro = ts.pro_api()
         self._stock_basic_cache = None
 
-    def get_all_codes(self) -> List[str]:
-        df = self.get_stock_basic()
-        return df['code'].tolist()
+    @staticmethod
+    def _to_ts_code(code: str) -> str:
+        """将纯数字代码转换为 Tushare ts_code 格式。
+
+        规则:
+          - 6xxxxx → SH（上海主板/科创板）
+          - 8xxxxx → BJ（北交所）
+          - 其余   → SZ（深圳主板/创业板）
+        """
+        code = str(code).zfill(6)
+        if code.startswith('6'):
+            return f"{code}.SH"
+        elif code.startswith('8'):
+            return f"{code}.BJ"
+        else:
+            return f"{code}.SZ"
 
     def get_daily_prices(
         self,
@@ -24,7 +40,7 @@ class TushareProvider(DataProvider):
         for code in codes:
             try:
                 df = self._pro.daily(
-                    ts_code=f"{code}.SH" if code.startswith('6') else f"{code}.SZ",
+                    ts_code=self._to_ts_code(code),
                     start_date=start_date,
                     end_date=end_date,
                     adj='hfq'
@@ -43,7 +59,8 @@ class TushareProvider(DataProvider):
                         'turnover_rate': 'turnover_rate'
                     })
                     all_data.append(df)
-            except Exception:
+            except Exception as e:
+                logger.warning("获取 %s 日线数据失败: %s", code, e)
                 continue
         if not all_data:
             return pd.DataFrame()
@@ -88,13 +105,14 @@ class TushareProvider(DataProvider):
     def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
         all_data = []
         for code in codes:
-            ts_code = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
+            ts_code = self._to_ts_code(code)
             try:
                 df = self._pro.fina_indicator(ts_code=ts_code, start_date=date, end_date=date)
                 if not df.empty:
                     df['code'] = code
                     all_data.append(df)
-            except Exception:
+            except Exception as e:
+                logger.warning("获取 %s 基本面数据失败: %s", code, e)
                 continue
         if not all_data:
             return pd.DataFrame()
@@ -106,7 +124,7 @@ class TushareProvider(DataProvider):
         return df['cal_date'].tolist()
 
     def get_latest_price(self, code: str) -> float:
-        ts_code = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
+        ts_code = self._to_ts_code(code)
         df = self._pro.realtime_quote(ts_code=ts_code)
         if not df.empty:
             return float(df.iloc[0]['price'])

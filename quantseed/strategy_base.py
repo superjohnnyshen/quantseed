@@ -13,9 +13,13 @@
 import datetime
 import json
 from pathlib import Path
+from typing import Optional, TYPE_CHECKING
 
 from quantseed.state_store import StateStore
 from quantseed.equity_tracker import EquityTracker
+
+if TYPE_CHECKING:
+    from quantseed.data.interface import DataProvider
 
 
 class BaseStrategy:
@@ -62,7 +66,7 @@ class BaseStrategy:
         self.config = self._load_config()
 
         # 数据接口（由调度器注入）
-        self.data = None
+        self.data: Optional["DataProvider"] = None
 
     def _load_config(self):
         cfg_path = self.strategy_dir / "config.json"

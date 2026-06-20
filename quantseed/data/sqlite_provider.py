@@ -12,17 +12,14 @@ class SQLiteProvider(DataProvider):
     def _connect(self):
         return sqlite3.connect(self._db_path)
 
-    def get_all_codes(self) -> List[str]:
-        df = self.get_stock_basic()
-        return df['code'].tolist()
-
     def get_daily_prices(
         self,
         codes: List[str],
         start_date: str,
         end_date: str
     ) -> pd.DataFrame:
-        conn = self._connect()
+        if not codes:
+            return pd.DataFrame()
         placeholders = ','.join(['?'] * len(codes))
         query = f"""
             SELECT trade_date, code, open, close, high, low, volume, amount, change_pct, turnover_rate
@@ -32,15 +29,14 @@ class SQLiteProvider(DataProvider):
             AND trade_date <= ?
             ORDER BY trade_date, code
         """
-        df = pd.read_sql_query(query, conn, params=codes + [start_date, end_date])
-        conn.close()
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=codes + [start_date, end_date])
         return df
 
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
-            conn = self._connect()
-            df = pd.read_sql_query("SELECT code, name, list_date, delist_date FROM stock_basic", conn)
-            conn.close()
+            with self._connect() as conn:
+                df = pd.read_sql_query("SELECT code, name, list_date, delist_date FROM stock_basic", conn)
             df['code'] = df['code'].astype(str).str.zfill(6)
             self._stock_basic_cache = df
         df = self._stock_basic_cache
@@ -49,7 +45,6 @@ class SQLiteProvider(DataProvider):
         return df
 
     def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        conn = self._connect()
         query = """
             SELECT trade_date, open, close, high, low, volume, amount, change_pct
             FROM index_daily
@@ -58,44 +53,43 @@ class SQLiteProvider(DataProvider):
             AND trade_date <= ?
             ORDER BY trade_date
         """
-        df = pd.read_sql_query(query, conn, params=[index_code, start_date, end_date])
-        conn.close()
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=[index_code, start_date, end_date])
         return df
 
     def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
-        conn = self._connect()
+        if not codes:
+            return pd.DataFrame()
         placeholders = ','.join(['?'] * len(codes))
         query = f"""
             SELECT * FROM fundamentals
             WHERE code IN ({placeholders})
             AND report_date = ?
         """
-        df = pd.read_sql_query(query, conn, params=codes + [date])
-        conn.close()
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=codes + [date])
         return df
 
     def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
-        conn = self._connect()
         query = """
             SELECT trade_date FROM trade_calendar
             WHERE trade_date >= ?
             AND trade_date <= ?
             ORDER BY trade_date
         """
-        df = pd.read_sql_query(query, conn, params=[start_date, end_date])
-        conn.close()
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=[start_date, end_date])
         return df['trade_date'].tolist()
 
     def get_latest_price(self, code: str) -> float:
-        conn = self._connect()
         query = """
             SELECT close FROM daily_prices
             WHERE code = ?
             ORDER BY trade_date DESC
             LIMIT 1
         """
-        df = pd.read_sql_query(query, conn, params=[str(code).zfill(6)])
-        conn.close()
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=[str(code).zfill(6)])
         if not df.empty:
             return float(df.iloc[0]['close'])
         return 0.0

@@ -4,9 +4,10 @@ import pandas as pd
 
 
 class DataProvider(ABC):
-    @abstractmethod
     def get_all_codes(self) -> List[str]:
-        pass
+        """获取全部股票代码。默认从 get_stock_basic() 派生。"""
+        df = self.get_stock_basic()
+        return df['code'].tolist()
 
     @abstractmethod
     def get_daily_prices(

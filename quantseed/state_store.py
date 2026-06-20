@@ -4,8 +4,11 @@
 写入时先写临时文件再原子替换，防止写入中断导致文件损坏。
 """
 import json
+import logging
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class StateStore:
@@ -18,14 +21,15 @@ class StateStore:
 
     def load(self, default=None):
         if not self.state_path.exists():
-            return default or {}
+            return default if default is not None else {}
         try:
             with open(self.state_path, "r", encoding="utf-8") as f:
                 self._cache = json.load(f)
             self._mtime = self.state_path.stat().st_mtime
             return self._cache
-        except Exception:
-            return default or {}
+        except Exception as e:
+            logger.warning("加载状态文件失败: %s - %s", self.state_path, e)
+            return default if default is not None else {}
 
     def save(self, data):
         tmp = self.state_path.with_suffix(".json.tmp")

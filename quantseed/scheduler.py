@@ -4,6 +4,7 @@
 """
 import time
 import datetime
+import signal
 import importlib.util
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ class Scheduler:
         self._last_open_date = None
         self._last_close_date = None
         self._last_eod_date = None
+        self._running = True
 
     def register(self, strategy):
         """注册一个策略实例。"""
@@ -58,7 +60,14 @@ class Scheduler:
           - 09:25-09:35  on_open（开盘卖出）
           - 14:45-14:55  on_close（尾盘买入）
           - 15:05-15:15  on_eod（日终对账）
+
+        只在交易日触发，周末/节假日自动跳过。
+        支持 Ctrl+C 优雅退出。
         """
+        # 注册信号处理，支持优雅退出
+        signal.signal(signal.SIGINT, self._handle_shutdown)
+        signal.signal(signal.SIGTERM, self._handle_shutdown)
+
         print(f"[scheduler] 启动: 共 {len(self.strategies)} 个策略")
         for s in self.strategies:
             s.log(f"策略初始化: {s.description}")
@@ -69,10 +78,15 @@ class Scheduler:
         for s in self.strategies:
             s.data = data
 
-        while True:
+        while self._running:
             now = datetime.datetime.now()
             today = now.strftime("%Y-%m-%d")
             hm = now.strftime("%H:%M")
+
+            # 非交易日跳过
+            if not self._is_trading_day(today, data):
+                time.sleep(60)
+                continue
 
             # 9:25 - 开盘后 on_open（卖出昨日持仓）
             if "09:25" <= hm <= "09:35" and today != self._last_open_date:
@@ -102,6 +116,26 @@ class Scheduler:
                 self._last_eod_date = today
 
             time.sleep(30)
+
+        print("[scheduler] 已退出")
+
+    def _handle_shutdown(self, signum, frame):
+        """处理 Ctrl+C / SIGTERM 信号，优雅退出。"""
+        print("\n[scheduler] 收到退出信号，正在关闭...")
+        self._running = False
+
+    def _is_trading_day(self, today: str, data) -> bool:
+        """判断是否为交易日。
+
+        优先使用数据源的交易日历，如果数据源不可用则回退到简单的周末判断。
+        """
+        if data is None:
+            return datetime.date.today().weekday() < 5
+        try:
+            calendar = data.get_trade_calendar(today, today)
+            return today in calendar
+        except Exception:
+            return datetime.date.today().weekday() < 5
 
 
 def _import_strategy(strategy_dir: Path):

@@ -9,7 +9,11 @@ QMT_DATA_PATH = os.getenv("QMT_DATA_PATH", "quantseed_data.db")
 
 # QMT 交易相关配置
 QMT_USERDATA_PATH = os.getenv("QMT_USERDATA_PATH", "")
-QMT_SESSION_ID = int(os.getenv("QMT_SESSION_ID", "0"))
+
+try:
+    QMT_SESSION_ID = int(os.getenv("QMT_SESSION_ID", "0"))
+except ValueError:
+    QMT_SESSION_ID = 0
 
 # 兼容旧变量名
 SQLITE_DB_PATH = QMT_DATA_PATH

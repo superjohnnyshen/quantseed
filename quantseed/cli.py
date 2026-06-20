@@ -104,8 +104,31 @@ def _cmd_check(verbose=False):
 
 def _cmd_sync(full=False):
     """触发数据同步。"""
-    print("数据同步功能需要 QMT xtdata，请参考 data/sync/ 目录。")
-    print("或使用 Tushare/AkShare 作为数据源: export QUANTSEED_DATA_PROVIDER=tushare")
+    from quantseed.config import DATA_PROVIDER, get_data_provider
+
+    print(f"数据同步: 当前数据源 = {DATA_PROVIDER}")
+
+    if DATA_PROVIDER == "sqlite":
+        print("SQLite 数据源通过 QMT xtdata 同步，请在 QMT 中执行数据下载。")
+        print("导出路径: 请设置 QMT_DATA_PATH 环境变量指向数据库文件。")
+    elif DATA_PROVIDER == "tushare":
+        try:
+            data = get_data_provider()
+            codes = data.get_all_codes()
+            print(f"Tushare 连接成功，可用 {len(codes)} 只股票。")
+            print("数据按需拉取，无需预同步。")
+        except Exception as e:
+            print(f"Tushare 连接失败: {e}")
+    elif DATA_PROVIDER == "akshare":
+        try:
+            data = get_data_provider()
+            codes = data.get_all_codes()
+            print(f"AkShare 连接成功，可用 {len(codes)} 只股票。")
+            print("数据按需拉取，无需预同步。")
+        except Exception as e:
+            print(f"AkShare 连接失败: {e}")
+    else:
+        print(f"未知数据源: {DATA_PROVIDER}")
 
 
 if __name__ == "__main__":
