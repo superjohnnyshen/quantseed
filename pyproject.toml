@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantseed"
-version = "0.1.5"
+version = "0.1.6"
 description = "个人量化从零到一启动包：SOP 方法论 + 多策略框架 + 多数据源"
 readme = "README.md"
 requires-python = ">=3.9"
