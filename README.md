@@ -108,25 +108,34 @@ class MyStrategy(BaseStrategy):
 
 ```
 quantseed/
-├── SOP.md                     # 方法论
+├── SOP.md                       # 方法论（V3.1）
 ├── README.md
+├── LICENSE
+├── .gitignore
 ├── pyproject.toml
 ├── quantseed/
-│   ├── config.py              # 环境变量驱动
-│   ├── scheduler.py           # 主循环
-│   ├── strategy_base.py       # 策略基类
-│   ├── state_store.py         # 状态持久化
-│   ├── equity_tracker.py      # 净值追踪
-│   ├── trading.py             # QMT 交易封装（可选）
-│   ├── cli.py                 # 命令行入口
-│   └── data/                  # 数据层
-│       ├── interface.py       # 数据接口
-│       ├── sqlite_provider.py # QMT/SQLite
-│       ├── tushare_provider.py
-│       └── akshare_provider.py
+│   ├── __init__.py              # 包入口
+│   ├── config.py                # 环境变量驱动 + 数据源工厂
+│   ├── scheduler.py             # 主循环调度器
+│   ├── strategy_base.py         # 策略基类
+│   ├── state_store.py           # 状态持久化
+│   ├── equity_tracker.py        # 净值追踪
+│   ├── trading.py               # QMT 交易封装
+│   ├── cli.py                   # 命令行入口
+│   └── data/                    # 数据层
+│       ├── __init__.py
+│       ├── interface.py         # 数据接口抽象
+│       ├── akshare_provider.py  # AkShare（免费）
+│       ├── tushare_provider.py  # Tushare
+│       └── sqlite_provider.py   # QMT SQLite
 ├── examples/
 │   └── demo_strategy/
-└── .trae/                     # TRAE Skill 配置
+│       ├── config.json
+│       └── strategy.py
+└── .trae/
+    └── skills/
+        └── quantseed-sop/
+            └── SKILL.md         # TRAE 通用 Skill（IDE + Work）
 ```
 
 ---
