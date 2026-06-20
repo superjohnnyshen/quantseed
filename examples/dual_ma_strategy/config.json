@@ -1,0 +1,8 @@
+{
+    "short_window": 5,
+    "long_window": 20,
+    "max_positions": 3,
+    "position_pct": 0.3,
+    "stop_loss_pct": -0.08,
+    "universe": ["600519", "000001", "300750", "000858", "601318"]
+}

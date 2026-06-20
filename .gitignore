@@ -17,6 +17,8 @@ strategies/*/trades.csv
 strategies/*/equity.csv
 examples/*/trades.csv
 examples/*/equity.csv
+examples/*/run/
+examples/*/data/
 
 # 日志
 logs/
