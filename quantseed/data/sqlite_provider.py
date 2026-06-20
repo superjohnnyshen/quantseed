@@ -56,7 +56,11 @@ class SQLiteProvider(DataProvider):
                 ))
         if not frames:
             return pd.DataFrame()
-        return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+        # 过滤掉空 DataFrame，避免 pandas 2.x FutureWarning
+        non_empty = [f for f in frames if not f.empty]
+        if not non_empty:
+            return pd.DataFrame()
+        return pd.concat(non_empty, ignore_index=True) if len(non_empty) > 1 else non_empty[0]
 
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
@@ -101,7 +105,11 @@ class SQLiteProvider(DataProvider):
                 ))
         if not frames:
             return pd.DataFrame()
-        return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+        # 过滤掉空 DataFrame，避免 pandas 2.x FutureWarning
+        non_empty = [f for f in frames if not f.empty]
+        if not non_empty:
+            return pd.DataFrame()
+        return pd.concat(non_empty, ignore_index=True) if len(non_empty) > 1 else non_empty[0]
 
     def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
         query = """

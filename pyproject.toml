@@ -39,9 +39,16 @@ qmt = ["xtquant"]
 tushare = ["tushare"]
 akshare = ["akshare"]
 all = ["quantseed[qmt,tushare,akshare]"]
+dev = ["pytest>=7.0"]
 
 [project.scripts]
 quantseed = "quantseed.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["quantseed*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
