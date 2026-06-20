@@ -1,0 +1,8 @@
+{
+    "name": "demo_momentum",
+    "description": "演示策略：买入最近 5 日涨幅最大的 2 只股票",
+    "total_capital": 100000.0,
+    "max_single_position": 50000.0,
+    "head_n": 2,
+    "lookback_days": 5
+}

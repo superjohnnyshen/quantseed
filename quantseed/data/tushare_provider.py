@@ -1,0 +1,113 @@
+import tushare as ts
+import pandas as pd
+from typing import List, Optional
+from .interface import DataProvider
+
+
+class TushareProvider(DataProvider):
+    def __init__(self, token: str):
+        ts.set_token(token)
+        self._pro = ts.pro_api()
+        self._stock_basic_cache = None
+
+    def get_all_codes(self) -> List[str]:
+        df = self.get_stock_basic()
+        return df['code'].tolist()
+
+    def get_daily_prices(
+        self,
+        codes: List[str],
+        start_date: str,
+        end_date: str
+    ) -> pd.DataFrame:
+        all_data = []
+        for code in codes:
+            try:
+                df = self._pro.daily(
+                    ts_code=f"{code}.SH" if code.startswith('6') else f"{code}.SZ",
+                    start_date=start_date,
+                    end_date=end_date,
+                    adj='hfq'
+                )
+                if not df.empty:
+                    df['code'] = df['ts_code'].str[:6]
+                    df = df.rename(columns={
+                        'trade_date': 'trade_date',
+                        'open': 'open',
+                        'close': 'close',
+                        'high': 'high',
+                        'low': 'low',
+                        'vol': 'volume',
+                        'amount': 'amount',
+                        'pct_chg': 'change_pct',
+                        'turnover_rate': 'turnover_rate'
+                    })
+                    all_data.append(df)
+            except Exception:
+                continue
+        if not all_data:
+            return pd.DataFrame()
+        return pd.concat(all_data, ignore_index=True)
+
+    def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
+        if self._stock_basic_cache is None:
+            df = self._pro.stock_basic(exchange='', list_status='L')
+            df = df[['ts_code', 'symbol', 'name', 'list_date', 'delist_date']]
+            df = df.rename(columns={
+                'symbol': 'code',
+                'name': 'name',
+                'list_date': 'list_date',
+                'delist_date': 'delist_date'
+            })
+            df['code'] = df['code'].astype(str).str.zfill(6)
+            self._stock_basic_cache = df
+        df = self._stock_basic_cache
+        if codes:
+            df = df[df['code'].isin([str(c).zfill(6) for c in codes])]
+        return df
+
+    def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        df = self._pro.index_daily(
+            ts_code=index_code,
+            start_date=start_date,
+            end_date=end_date
+        )
+        if not df.empty:
+            df = df.rename(columns={
+                'trade_date': 'trade_date',
+                'open': 'open',
+                'close': 'close',
+                'high': 'high',
+                'low': 'low',
+                'vol': 'volume',
+                'amount': 'amount',
+                'pct_chg': 'change_pct'
+            })
+        return df
+
+    def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
+        all_data = []
+        for code in codes:
+            ts_code = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
+            try:
+                df = self._pro.fina_indicator(ts_code=ts_code, start_date=date, end_date=date)
+                if not df.empty:
+                    df['code'] = code
+                    all_data.append(df)
+            except Exception:
+                continue
+        if not all_data:
+            return pd.DataFrame()
+        return pd.concat(all_data, ignore_index=True)
+
+    def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
+        df = self._pro.trade_cal(start_date=start_date, end_date=end_date)
+        df = df[df['is_open'] == 1]
+        return df['cal_date'].tolist()
+
+    def get_latest_price(self, code: str) -> float:
+        ts_code = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
+        df = self._pro.realtime_quote(ts_code=ts_code)
+        if not df.empty:
+            return float(df.iloc[0]['price'])
+        return 0.0

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# 策略数据
+strategies/*/state.json
+strategies/*/trades.csv
+strategies/*/equity.csv
+
+# 日志
+logs/
+*.log
+
+# 输出
+output/
+
+# Tushare Token
+.tushare_token
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 数据快照
+data_snapshots/
+
+# QMT
+*.db
+*.db-journal
+
+# OS
+.DS_Store
+Thumbs.db
