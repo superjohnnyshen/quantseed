@@ -79,7 +79,12 @@ class Scheduler:
 
         # 注入数据接口
         from quantseed.config import get_data_provider
-        data = get_data_provider()
+        try:
+            data = get_data_provider()
+        except Exception as e:
+            print(f"[scheduler] 数据源初始化失败: {e}")
+            print("[scheduler] 退出")
+            return
         for s in self.strategies:
             s.data = data
 

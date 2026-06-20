@@ -1,4 +1,3 @@
-import tushare as ts
 import pandas as pd
 import logging
 from typing import List, Optional
@@ -9,7 +8,9 @@ logger = logging.getLogger(__name__)
 
 class TushareProvider(DataProvider):
     def __init__(self, token: str):
+        import tushare as ts  # 延迟导入：仅在使用 Tushare 时才需要安装
         ts.set_token(token)
+        self._ts = ts
         self._pro = ts.pro_api()
         self._stock_basic_cache = None
 
@@ -30,6 +31,11 @@ class TushareProvider(DataProvider):
         else:
             return f"{code}.SZ"
 
+    @staticmethod
+    def _to_tushare_date(date_str: str) -> str:
+        """将 YYYY-MM-DD 转换为 Tushare 要求的 YYYYMMDD 格式。"""
+        return date_str.replace("-", "")
+
     def get_daily_prices(
         self,
         codes: List[str],
@@ -42,10 +48,10 @@ class TushareProvider(DataProvider):
         for code in codes:
             try:
                 # 使用 pro_bar 获取后复权数据，pro.daily 不支持 adj 参数
-                df = ts.pro_bar(
+                df = self._ts.pro_bar(
                     ts_code=self._to_ts_code(code),
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=self._to_tushare_date(start_date),
+                    end_date=self._to_tushare_date(end_date),
                     adj='hfq'
                 )
                 if df is not None and not df.empty:
@@ -77,8 +83,8 @@ class TushareProvider(DataProvider):
     def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         df = self._pro.index_daily(
             ts_code=index_code,
-            start_date=start_date,
-            end_date=end_date
+            start_date=self._to_tushare_date(start_date),
+            end_date=self._to_tushare_date(end_date)
         )
         if not df.empty:
             df = df.rename(columns={
@@ -92,16 +98,16 @@ class TushareProvider(DataProvider):
 
         Args:
             codes: 股票代码列表
-            date: 报告期，格式 YYYYMMDD（如 "20231231"）
+            date: 报告期，格式 YYYY-MM-DD 或 YYYYMMDD
         """
         if not codes:
             return pd.DataFrame()
+        period = self._to_tushare_date(date)
         all_data = []
         for code in codes:
             ts_code = self._to_ts_code(code)
             try:
-                # fina_indicator 使用 period 参数指定报告期，而非 start_date/end_date
-                df = self._pro.fina_indicator(ts_code=ts_code, period=date)
+                df = self._pro.fina_indicator(ts_code=ts_code, period=period)
                 if not df.empty:
                     df['code'] = code
                     all_data.append(df)
@@ -113,9 +119,13 @@ class TushareProvider(DataProvider):
         return pd.concat(all_data, ignore_index=True)
 
     def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
-        df = self._pro.trade_cal(start_date=start_date, end_date=end_date)
+        df = self._pro.trade_cal(
+            start_date=self._to_tushare_date(start_date),
+            end_date=self._to_tushare_date(end_date)
+        )
         df = df[df['is_open'] == 1]
-        return df['cal_date'].tolist()
+        # 统一返回 YYYY-MM-DD 格式
+        return [d[:4] + "-" + d[4:6] + "-" + d[6:8] for d in df['cal_date'].tolist()]
 
     def get_latest_price(self, code: str) -> float:
         ts_code = self._to_ts_code(code)

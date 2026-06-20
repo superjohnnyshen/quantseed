@@ -67,6 +67,8 @@ export QMT_DATA_PATH=C:/qmt_data/db.sqlite
 quantseed run
 ```
 
+> 三种数据源的差异、注册方式、积分权限、限流规避等详见 [数据源说明](docs/data-sources.md)。
+
 ---
 
 ## 写一个策略
@@ -91,7 +93,13 @@ class MyStrategy(BaseStrategy):
 
     def on_eod(self, now: datetime.datetime):
         # 15:05 - 日终对账
-        self.tracker.record_equity(100000, 100000, 0, 0)
+        self.tracker.record_equity(
+            total_equity=100000,  # 总资产
+            cash=100000,          # 现金
+            stock_value=0,        # 持仓市值
+            positions=0,          # 持仓数量
+            pnl_daily=0,          # 当日盈亏
+        )
 ```
 
 ---

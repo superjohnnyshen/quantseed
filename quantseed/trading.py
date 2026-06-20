@@ -41,6 +41,10 @@ class TradingAPI:
             connect_result = self.xt_trader.connect()
             if connect_result == 0:
                 self.account = account_id or self._subscribe_account()
+                if self.account is None:
+                    logger.error("订阅账户失败，QMT 交易不可用")
+                    self._connected = False
+                    return False
                 self._connected = True
                 return True
             return False

@@ -1,4 +1,3 @@
-import akshare as ak
 import pandas as pd
 import logging
 import time
@@ -7,12 +6,32 @@ from .interface import DataProvider
 
 logger = logging.getLogger(__name__)
 
+# AkShare 底层走东财/新浪等公开接口，高频请求会被服务端断连
+# （典型报错：RemoteDisconnected）。每次请求间留出间隔可显著缓解。
+_REQUEST_INTERVAL_SEC = 0.3
+
 
 class AkShareProvider(DataProvider):
     def __init__(self):
+        import akshare as ak  # 延迟导入：仅在使用 AkShare 时才需要安装
+        self._ak = ak
         self._stock_basic_cache = None
         self._spot_cache = None
         self._spot_cache_time = 0
+        self._calendar_cache = None
+        self._last_request_ts = 0.0
+
+    def _throttle(self):
+        """简单的请求节流，避免触发东财/新浪的反爬。"""
+        elapsed = time.time() - self._last_request_ts
+        if elapsed < _REQUEST_INTERVAL_SEC:
+            time.sleep(_REQUEST_INTERVAL_SEC - elapsed)
+        self._last_request_ts = time.time()
+
+    @staticmethod
+    def _to_akshare_date(date_str: str) -> str:
+        """将 YYYY-MM-DD 转换为 AkShare 要求的 YYYYMMDD 格式。"""
+        return date_str.replace("-", "")
 
     def get_daily_prices(
         self,
@@ -25,15 +44,16 @@ class AkShareProvider(DataProvider):
         all_data = []
         for code in codes:
             try:
-                df = ak.stock_zh_a_hist(
-                    symbol=code,
+                self._throttle()
+                df = self._ak.stock_zh_a_hist(
+                    symbol=str(code).zfill(6),
                     period="daily",
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=self._to_akshare_date(start_date),
+                    end_date=self._to_akshare_date(end_date),
                     adjust="hfq"
                 )
                 if not df.empty:
-                    df['code'] = code
+                    df['code'] = str(code).zfill(6)
                     df = df.rename(columns={
                         '日期': 'trade_date',
                         '开盘': 'open',
@@ -58,16 +78,22 @@ class AkShareProvider(DataProvider):
 
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
-            df = ak.stock_info_a_code_name()
-            df['code'] = df['code'].astype(str).str.zfill(6)
-            self._stock_basic_cache = df
+            try:
+                self._throttle()
+                df = self._ak.stock_info_a_code_name()
+                df['code'] = df['code'].astype(str).str.zfill(6)
+                self._stock_basic_cache = df
+            except Exception as e:
+                logger.warning("获取股票列表失败: %s", e)
+                self._stock_basic_cache = pd.DataFrame(columns=['code', 'name'])
         df = self._stock_basic_cache
         if codes:
             df = df[df['code'].isin([str(c).zfill(6) for c in codes])]
         return df
 
     def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        df = ak.stock_zh_index_daily(symbol=index_code)
+        self._throttle()
+        df = self._ak.stock_zh_index_daily(symbol=index_code)
         if not df.empty:
             df = df.rename(columns={'date': 'trade_date'})
             # 先转 str 再过滤，避免 datetime 与 str 比较失败
@@ -88,9 +114,10 @@ class AkShareProvider(DataProvider):
         all_data = []
         for code in codes:
             try:
-                df = ak.stock_financial_report_sina(symbol=code)
+                self._throttle()
+                df = self._ak.stock_financial_report_sina(symbol=str(code).zfill(6))
                 if not df.empty:
-                    df['code'] = code
+                    df['code'] = str(code).zfill(6)
                     all_data.append(df)
             except Exception as e:
                 logger.warning("获取 %s 基本面数据失败: %s", code, e)
@@ -100,8 +127,17 @@ class AkShareProvider(DataProvider):
         return pd.concat(all_data, ignore_index=True)
 
     def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
-        df = ak.tool_trade_date_hist_sina()
-        df['trade_date'] = df['trade_date'].astype(str)
+        # 缓存全量交易日历，避免每次调用都下载 30+ 年数据
+        if self._calendar_cache is None:
+            try:
+                self._throttle()
+                df = self._ak.tool_trade_date_hist_sina()
+                df['trade_date'] = df['trade_date'].astype(str)
+                self._calendar_cache = df
+            except Exception as e:
+                logger.warning("获取交易日历失败: %s", e)
+                return []
+        df = self._calendar_cache
         df = df[(df['trade_date'] >= start_date) & (df['trade_date'] <= end_date)]
         return df['trade_date'].tolist()
 
@@ -109,7 +145,8 @@ class AkShareProvider(DataProvider):
         # 缓存全市场实时行情 60 秒，避免每次调用都下载 5000+ 股票数据
         now = time.time()
         if self._spot_cache is None or (now - self._spot_cache_time) > 60:
-            df = ak.stock_zh_a_spot_em()
+            self._throttle()
+            df = self._ak.stock_zh_a_spot_em()
             df['代码'] = df['代码'].astype(str).str.zfill(6)
             self._spot_cache = df
             self._spot_cache_time = now

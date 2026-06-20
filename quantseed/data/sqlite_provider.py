@@ -4,6 +4,9 @@ from contextlib import closing
 from typing import List, Optional
 from .interface import DataProvider
 
+# SQLite 默认 SQLITE_MAX_VARIABLE_NUMBER=999，留余量取 500
+_MAX_PARAMS = 500
+
 
 class SQLiteProvider(DataProvider):
     def __init__(self, db_path: str):
@@ -13,6 +16,17 @@ class SQLiteProvider(DataProvider):
     def _connect(self):
         return sqlite3.connect(self._db_path)
 
+    @staticmethod
+    def _normalize_codes(codes: List[str]) -> List[str]:
+        """统一为 6 位前导零字符串。"""
+        return [str(c).zfill(6) for c in codes]
+
+    @staticmethod
+    def _chunked(items: List[str], size: int = _MAX_PARAMS):
+        """将列表切分为不超过 size 长度的子列表，规避 SQLite 参数上限。"""
+        for i in range(0, len(items), size):
+            yield items[i:i + size]
+
     def get_daily_prices(
         self,
         codes: List[str],
@@ -21,8 +35,8 @@ class SQLiteProvider(DataProvider):
     ) -> pd.DataFrame:
         if not codes:
             return pd.DataFrame()
-        placeholders = ','.join(['?'] * len(codes))
-        query = f"""
+        codes = self._normalize_codes(codes)
+        query_tmpl = """
             SELECT trade_date, code, open, close, high, low, volume, amount, change_pct, turnover_rate
             FROM daily_prices
             WHERE code IN ({placeholders})
@@ -32,9 +46,17 @@ class SQLiteProvider(DataProvider):
         """
         # closing() 确保 with 块退出时关闭连接
         # sqlite3.Connection 的 with 只管理事务，不关闭连接
+        frames: List[pd.DataFrame] = []
         with closing(self._connect()) as conn:
-            df = pd.read_sql_query(query, conn, params=codes + [start_date, end_date])
-        return df
+            for chunk in self._chunked(codes):
+                placeholders = ','.join(['?'] * len(chunk))
+                query = query_tmpl.format(placeholders=placeholders)
+                frames.append(pd.read_sql_query(
+                    query, conn, params=chunk + [start_date, end_date]
+                ))
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
@@ -63,15 +85,23 @@ class SQLiteProvider(DataProvider):
     def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
         if not codes:
             return pd.DataFrame()
-        placeholders = ','.join(['?'] * len(codes))
-        query = f"""
+        codes = self._normalize_codes(codes)
+        query_tmpl = """
             SELECT * FROM fundamentals
             WHERE code IN ({placeholders})
             AND report_date = ?
         """
+        frames: List[pd.DataFrame] = []
         with closing(self._connect()) as conn:
-            df = pd.read_sql_query(query, conn, params=codes + [date])
-        return df
+            for chunk in self._chunked(codes):
+                placeholders = ','.join(['?'] * len(chunk))
+                query = query_tmpl.format(placeholders=placeholders)
+                frames.append(pd.read_sql_query(
+                    query, conn, params=chunk + [date]
+                ))
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
     def get_trade_calendar(self, start_date: str, end_date: str) -> List[str]:
         query = """

@@ -12,6 +12,11 @@ class DemoMomentumStrategy(BaseStrategy):
     name = "demo_momentum"
     description = "演示策略：买入最近 5 日涨幅最大的 2 只股票"
 
+    # 演示用样本数：AkShare 免费数据源对高频请求会限流，
+    # 全市场 5000+ 只逐个请求会触发 RemoteDisconnected。
+    # 实盘策略请改用 Tushare/SQLite 数据源或自行批量拉取。
+    SAMPLE_SIZE = 10
+
     def on_open(self, now: datetime.datetime):
         """开盘：打日志，正式策略在此卖出昨日持仓。"""
         self.log(f"开盘 [{now.strftime('%H:%M')}] - 演示策略，不做实际交易")
@@ -20,19 +25,17 @@ class DemoMomentumStrategy(BaseStrategy):
         """尾盘：计算最近 5 日涨幅，选出 Top 2。"""
         self.log(f"尾盘 [{now.strftime('%H:%M')}] - 计算动量信号")
 
-        # 获取昨日收盘数据
         today = now.strftime("%Y-%m-%d")
         try:
-            # 获取所有可交易股票
             codes = self.data.get_all_codes()
             if not codes:
                 self.log("未获取到可交易股票列表")
                 return
 
-            self.log(f"可交易股票: {len(codes)} 只")
+            # 演示只取前 N 只，避免触发数据源限流
+            codes = codes[:self.SAMPLE_SIZE]
+            self.log(f"采样股票: {len(codes)} 只（演示限流，实盘请用全量）")
 
-            # 获取近 5 日数据，计算涨幅
-            # 从当前日期往前推 5 个自然日（近似）
             from datetime import timedelta
             five_days_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
@@ -41,7 +44,6 @@ class DemoMomentumStrategy(BaseStrategy):
                 self.log("未获取到价格数据")
                 return
 
-            # 计算每只股票的最低价和最新价，得到涨幅
             result = []
             for code in codes:
                 code_prices = prices[prices["code"] == code]
@@ -59,7 +61,7 @@ class DemoMomentumStrategy(BaseStrategy):
             result_df = pd.DataFrame(result).sort_values("pct_5d", ascending=False)
             top_2 = result_df.head(2)
 
-            self.log(f"Top 2 动量股:")
+            self.log("Top 2 动量股:")
             for _, row in top_2.iterrows():
                 self.log(f"  {row['code']}: {row['pct_5d']:.2%}")
 
