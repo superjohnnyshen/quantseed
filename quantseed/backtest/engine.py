@@ -66,6 +66,66 @@ class BacktestResult:
             f"  交易次数:     {m['num_trades']}\n"
         )
 
+    def equity_chart(self, width: int = 50, height: int = 15) -> str:
+        """生成 ASCII 净值曲线图。
+
+        Args:
+            width: 图表宽度（字符数）
+            height: 图表高度（行数）
+
+        Returns:
+            ASCII 图表字符串
+        """
+        if self.equity_curve.empty or "total_equity" not in self.equity_curve.columns:
+            return "(无净值数据)"
+
+        equities = self.equity_curve["total_equity"].astype(float).values
+        dates = self.equity_curve["date"].astype(str).values if "date" in self.equity_curve.columns else None
+        n = len(equities)
+        if n < 2:
+            return "(数据不足)"
+
+        eq_min, eq_max = min(equities), max(equities)
+        if eq_max == eq_min:
+            eq_max = eq_min + 1
+
+        # 采样到 width 个点
+        if n > width:
+            indices = [int(i * (n - 1) / (width - 1)) for i in range(width)]
+        else:
+            indices = list(range(n))
+        sampled = [equities[i] for i in indices]
+        sampled_dates = [dates[i] for i in indices] if dates is not None else None
+
+        # 生成网格
+        grid = [[" " for _ in range(len(sampled))] for _ in range(height)]
+        for col, val in enumerate(sampled):
+            # 归一化到 [0, height-1]
+            row = int((eq_max - val) / (eq_max - eq_min) * (height - 1))
+            grid[row][col] = "●"
+
+        # 画线连接相邻点
+        for col in range(len(sampled) - 1):
+            r1 = int((eq_max - sampled[col]) / (eq_max - eq_min) * (height - 1))
+            r2 = int((eq_max - sampled[col + 1]) / (eq_max - eq_min) * (height - 1))
+            if r1 == r2:
+                continue
+            step = 1 if r2 > r1 else -1
+            for r in range(r1 + step, r2, step):
+                if grid[r][col] == " ":
+                    grid[r][col] = "│"
+
+        # 构建输出
+        lines = []
+        lines.append(f"净值曲线 ({eq_min:.0f} ~ {eq_max:.0f})")
+        lines.append("┌" + "─" * len(sampled) + "┐")
+        for row in grid:
+            lines.append("│" + "".join(row) + "│")
+        lines.append("└" + "─" * len(sampled) + "┘")
+        if sampled_dates is not None:
+            lines.append(f"  {sampled_dates[0]:>10}{'':>{len(sampled)-20}}{sampled_dates[-1]:>10}")
+        return "\n".join(lines)
+
 
 class Backtester:
     """回测引擎。

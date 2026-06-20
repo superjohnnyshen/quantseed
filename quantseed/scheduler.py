@@ -7,6 +7,7 @@ import datetime
 import signal
 import importlib.util
 import sys
+import traceback
 from pathlib import Path
 
 from quantseed.config import STRATEGIES_DIR
@@ -54,8 +55,9 @@ class Scheduler:
                         print(f"[scheduler] 加载策略: {instance.name}")
                 except Exception as e:
                     print(f"[scheduler] 加载策略失败: {sub.name} - {e}")
+                    traceback.print_exc()
 
-    def run(self):
+    def run(self, once=False):
         """主循环：按时间触发 on_open / on_close / on_eod。
 
         时间点:
@@ -65,13 +67,18 @@ class Scheduler:
 
         只在交易日触发，周末/节假日自动跳过。
         支持 Ctrl+C 优雅退出。
+
+        Args:
+            once: 如果 True，只执行一次当前时间点的钩子然后退出。
+                  用于调试 / 非交易时段快速验证。
         """
         # 注册信号处理，支持优雅退出（仅在主线程可用）
-        try:
-            signal.signal(signal.SIGINT, self._handle_shutdown)
-            signal.signal(signal.SIGTERM, self._handle_shutdown)
-        except ValueError:
-            pass  # 非主线程不支持 signal
+        if not once:
+            try:
+                signal.signal(signal.SIGINT, self._handle_shutdown)
+                signal.signal(signal.SIGTERM, self._handle_shutdown)
+            except ValueError:
+                pass  # 非主线程不支持 signal
 
         print(f"[scheduler] 启动: 共 {len(self.strategies)} 个策略")
         for s in self.strategies:
@@ -88,6 +95,18 @@ class Scheduler:
         for s in self.strategies:
             s.data = data
 
+        # 注入交易接口（实盘时可用，回测/模拟时 trader 不连接）
+        try:
+            from quantseed.trading import trader
+            for s in self.strategies:
+                s.trader = trader
+        except Exception:
+            pass  # trader 不可用，策略仍可运行（模拟模式）
+
+        if once:
+            self._run_once(data)
+            return
+
         while self._running:
             now = datetime.datetime.now()
             today = now.strftime("%Y-%m-%d")
@@ -100,34 +119,63 @@ class Scheduler:
 
             # 9:25 - 开盘后 on_open（卖出昨日持仓）
             if "09:25" <= hm <= "09:35" and today != self._last_open_date:
-                for s in self.strategies:
-                    try:
-                        s.on_open(now)
-                    except Exception as e:
-                        s.log(f"on_open 异常: {e}")
+                self._trigger("on_open", now)
                 self._last_open_date = today
 
             # 14:45 - 尾盘 on_close（买入建仓）
             if "14:45" <= hm <= "14:55" and today != self._last_close_date:
-                for s in self.strategies:
-                    try:
-                        s.on_close(now)
-                    except Exception as e:
-                        s.log(f"on_close 异常: {e}")
+                self._trigger("on_close", now)
                 self._last_close_date = today
 
             # 15:05 - 日终 on_eod（对账/净值）
             if "15:05" <= hm <= "15:15" and today != self._last_eod_date:
-                for s in self.strategies:
-                    try:
-                        s.on_eod(now)
-                    except Exception as e:
-                        s.log(f"on_eod 异常: {e}")
+                self._trigger("on_eod", now)
                 self._last_eod_date = today
 
             time.sleep(30)
 
         print("[scheduler] 已退出")
+
+    def _run_once(self, data):
+        """单次模式：执行当前时间点对应的钩子，然后退出。
+
+        非交易时段时，三个钩子都执行一遍，方便调试。
+        """
+        now = datetime.datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        hm = now.strftime("%H:%M")
+        is_trading_day = self._is_trading_day(today, data)
+
+        if not is_trading_day:
+            print(f"[scheduler] 今天非交易日 ({today})，仍执行一次用于调试")
+
+        # 判断当前属于哪个时段
+        if "09:25" <= hm <= "14:44":
+            self._trigger("on_open", now)
+        elif "14:45" <= hm <= "15:04":
+            self._trigger("on_open", now)
+            self._trigger("on_close", now)
+        elif "15:05" <= hm <= "23:59":
+            self._trigger("on_open", now)
+            self._trigger("on_close", now)
+            self._trigger("on_eod", now)
+        else:
+            # 非交易时段：三个都执行
+            print("[scheduler] 非交易时段，依次执行 on_open → on_close → on_eod")
+            self._trigger("on_open", now)
+            self._trigger("on_close", now)
+            self._trigger("on_eod", now)
+
+        print("[scheduler] 单次模式完成")
+
+    def _trigger(self, hook: str, now: datetime.datetime):
+        """触发所有策略的指定钩子，异常打印完整 traceback。"""
+        for s in self.strategies:
+            try:
+                getattr(s, hook)(now)
+            except Exception as e:
+                s.log(f"{hook} 异常: {e}")
+                traceback.print_exc()
 
     def _handle_shutdown(self, signum, frame):
         """处理 Ctrl+C / SIGTERM 信号，优雅退出。"""

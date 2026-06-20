@@ -2,10 +2,9 @@
 
 这是 quantseed 框架的第一个真实策略示例，展示：
 1. 如何用 BaseStrategy 的三个钩子（on_open/on_close/on_eod）
-2. 如何从 self.data 读取历史价格计算信号
-3. 如何用 self.state 持久化持仓状态（崩溃恢复）
-4. 如何用 self.tracker 记录交易和净值
-5. 如何用 config.json 参数化策略
+2. 如何用 self.data 读取历史价格计算信号
+3. 如何用 self.buy/sell 下单（框架自动管理 state + 交易日志）
+4. 如何用 config.json 参数化策略
 
 策略逻辑：
 - on_close（14:45）：扫描股票池，计算 MA5/MA20
@@ -53,36 +52,15 @@ class DualMAStrategy(BaseStrategy):
                 last_equity=100000.0,  # 昨日净值，用于算 pnl_daily
             )
 
-    def _get_price(self, code: str, now: datetime.datetime) -> float:
-        """获取当前日期的收盘价。
-
-        回测场景：用 get_price_on_date 取历史当日价。
-        实盘场景：如果 get_price_on_date 返回 0（今天还没收盘），降级用 get_latest_price。
-        """
-        if self.data is None:
-            return 0.0
-        date_str = now.strftime("%Y-%m-%d")
-        try:
-            price = self.data.get_price_on_date(code, date_str)
-            if price > 0:
-                return price
-        except Exception:
-            pass
-        # 降级：实盘当日还没数据时用实时价
-        try:
-            return self.data.get_latest_price(code)
-        except Exception:
-            return 0.0
-
     # ========== 三个钩子 ==========
 
     def on_open(self, now: datetime.datetime):
-        """09:25 开盘：执行卖出信号（先卖后买，释放资金）。"""
+        """09:25 开盘：执行卖出信号 + 止损（先卖后买，释放资金）。"""
         self.log(f"开盘 [{now.strftime('%H:%M')}] - 检查卖出信号")
         self._execute_sells(now)
 
     def on_close(self, now: datetime.datetime):
-        """14:45 尾盘：扫描信号 + 执行买入（先扫信号，再用当日收盘价买入）。"""
+        """14:45 尾盘：扫描信号 + 执行买入。"""
         self.log(f"尾盘 [{now.strftime('%H:%M')}] - 计算双均线信号")
         self._scan_signals(now)
         self._execute_buys(now)
@@ -95,18 +73,13 @@ class DualMAStrategy(BaseStrategy):
     # ========== 信号计算 ==========
 
     def _scan_signals(self, now: datetime.datetime) -> Dict[str, str]:
-        """扫描股票池，计算 MA 交叉信号。
-
-        Returns:
-            {code: "BUY" | "SELL" | "HOLD"}
-        """
+        """扫描股票池，计算 MA 交叉信号。"""
         signals: Dict[str, str] = {}
         if self.data is None:
             self.log("数据接口未注入")
             return signals
 
         today = now.strftime("%Y-%m-%d")
-        # 拉取 long_window + 5 天的数据，确保能算出两条均线
         lookback_days = self.long_window + 10
         start_date = (now - datetime.timedelta(days=lookback_days * 2)).strftime(
             "%Y-%m-%d"
@@ -130,8 +103,6 @@ class DualMAStrategy(BaseStrategy):
             ma_short = code_prices["close"].rolling(self.short_window).mean()
             ma_long = code_prices["close"].rolling(self.long_window).mean()
 
-            # 金叉：昨天 MA5 < MA20，今天 MA5 > MA20
-            # 死叉：昨天 MA5 > MA20，今天 MA5 < MA20
             prev_diff = ma_short.iloc[-2] - ma_long.iloc[-2]
             curr_diff = ma_short.iloc[-1] - ma_long.iloc[-1]
 
@@ -144,20 +115,19 @@ class DualMAStrategy(BaseStrategy):
             else:
                 signals[code] = "HOLD"
 
-        # 把信号合并到 pending_signals（不覆盖未执行的旧信号）
+        # 合并到 pending_signals（不覆盖未执行的旧信号）
         if signals:
             pending = self.state.get("pending_signals", {})
             pending.update(signals)
             self.state.update(pending_signals=pending)
         return signals
 
-    # ========== 交易执行 ==========
+    # ========== 交易执行（用框架的 buy/sell 方法）==========
 
     def _execute_sells(self, now: datetime.datetime):
         """执行卖出信号 + 止损。"""
         signals = self.state.get("pending_signals", {})
         positions: Dict = self.state.get("positions", {})
-        cash: float = self.state.get("cash", 0.0)
 
         if not positions and not signals:
             return
@@ -172,62 +142,40 @@ class DualMAStrategy(BaseStrategy):
         # 2. 止损卖出
         for code in list(positions.keys()):
             avg_cost = positions[code].get("avg_cost", 0)
-            latest_price = self._get_price(code, now)
+            latest_price = self.get_price(code, now)
             if avg_cost > 0 and latest_price > 0:
                 pnl_pct = (latest_price - avg_cost) / avg_cost
                 if pnl_pct <= self.stop_loss_pct:
                     to_sell.append(code)
                     self.log(f"  {code} 触发止损 (亏损 {pnl_pct:.2%})")
 
-        # 执行卖出
+        # 执行卖出（用框架的 sell_all 方法）
+        sold_codes = []
         for code in to_sell:
             if code not in positions:
                 continue
-            pos = positions[code]
-            qty = pos.get("qty", 0)
-            if qty <= 0:
-                continue
-            price = self._get_price(code, now)
+            price = self.get_price(code, now)
             if price <= 0:
                 continue
-
-            amount = price * qty
-            cash += amount
-            del positions[code]
-
-            self.tracker.record_trade(
-                code=code,
-                name=code,  # 实盘可从 stock_basic 查 name
-                action="SELL",
-                price=price,
-                qty=qty,
-                strategy=self.name,
-                note=f"卖出 {qty} 股 @ {price}",
-                dt=now,
-            )
-            self.log(f"  卖出 {code}: {qty} 股 @ {price:.2f} = {amount:.2f}")
+            if self.sell_all(code, price, now=now, note="死叉/止损"):
+                sold_codes.append(code)
 
         # 清理已执行的信号
-        remaining_signals = {
-            k: v for k, v in signals.items() if k not in to_sell
-        }
-        self.state.update(
-            positions=positions,
-            cash=cash,
-            pending_signals=remaining_signals,
-        )
+        if sold_codes:
+            remaining_signals = {
+                k: v for k, v in signals.items() if k not in sold_codes
+            }
+            self.state.update(pending_signals=remaining_signals)
 
     def _execute_buys(self, now: datetime.datetime):
-        """执行买入信号（在 on_close 后调用，用当日收盘价）。"""
+        """执行买入信号。"""
         signals = self.state.get("pending_signals", {})
         positions: Dict = self.state.get("positions", {})
-        cash: float = self.state.get("cash", 0.0)
 
         buy_signals = [c for c, s in signals.items() if s == "BUY"]
         if not buy_signals:
             return
 
-        # 仓位限制
         available_slots = self.max_positions - len(positions)
         if available_slots <= 0:
             self.log(f"已达最大持仓数 {self.max_positions}，跳过买入")
@@ -238,59 +186,37 @@ class DualMAStrategy(BaseStrategy):
 
         bought_codes = []
         for code in buy_candidates:
-            if cash < target_amount:
-                self.log(f"现金不足 ({cash:.2f} < {target_amount:.2f})，跳过 {code}")
+            if self.get_cash() < target_amount:
+                self.log(f"现金不足 ({self.get_cash():.2f} < {target_amount:.2f})，跳过 {code}")
                 continue
-            price = self._get_price(code, now)
+            price = self.get_price(code, now)
             if price <= 0:
                 continue
 
             qty = int(target_amount / price / 100) * 100  # 整百手
             if qty <= 0:
                 continue
-            amount = price * qty
-            cash -= amount
-            positions[code] = {"qty": qty, "avg_cost": price}
-            bought_codes.append(code)
 
-            self.tracker.record_trade(
-                code=code,
-                name=code,
-                action="BUY",
-                price=price,
-                qty=qty,
-                strategy=self.name,
-                note=f"买入 {qty} 股 @ {price}",
-                dt=now,
-            )
-            self.log(f"  买入 {code}: {qty} 股 @ {price:.2f} = {amount:.2f}")
+            if self.buy(code, qty, price, now=now, note="金叉买入"):
+                bought_codes.append(code)
 
         # 清理已执行的买入信号
-        remaining_signals = {
-            k: v for k, v in signals.items() if k not in bought_codes
-        }
-        self.state.update(
-            positions=positions,
-            cash=cash,
-            pending_signals=remaining_signals,
-        )
+        if bought_codes:
+            remaining_signals = {
+                k: v for k, v in signals.items() if k not in bought_codes
+            }
+            self.state.update(pending_signals=remaining_signals)
 
     # ========== 净值记录 ==========
 
     def _record_equity(self, now: datetime.datetime):
         """计算并记录当日净值。"""
-        positions: Dict = self.state.get("positions", {})
-        cash: float = self.state.get("cash", 0.0)
+        cash = self.get_cash()
+        positions = self.state.get("positions", {})
         last_equity: float = self.state.get("last_equity", 0.0)
 
-        stock_value = 0.0
-        for code, pos in positions.items():
-            qty = pos.get("qty", 0)
-            price = self._get_price(code, now)
-            stock_value += price * qty
-
+        stock_value = self.get_stock_value(now)
         total_equity = cash + stock_value
-        # 真正的日盈亏 = 今日净值 - 昨日净值
         pnl_daily = total_equity - last_equity
 
         self.tracker.record_equity(
@@ -301,7 +227,6 @@ class DualMAStrategy(BaseStrategy):
             pnl_daily=pnl_daily,
             date=now,
         )
-        # 更新 last_equity 供明日使用
         self.state.update(last_equity=total_equity)
         self.log(
             f"  净值: {total_equity:.2f} (现金 {cash:.2f} + 股票 {stock_value:.2f}, "
