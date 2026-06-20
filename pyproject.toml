@@ -5,7 +5,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 [project]
 name = "quantseed"
 version = "0.1.0"
-description = "量化策略从零到一启动包：SOP 方法论 + 多策略框架 + 数据管道"
+description = "个人量化从零到一启动包：SOP 方法论 + 多策略框架 + 多数据源"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
