@@ -5,7 +5,10 @@
 
 注意：此模块是可选的，仅 QMT 用户需要。
 """
+import logging
 from quantseed.config import QMT_USERDATA_PATH, QMT_SESSION_ID
+
+logger = logging.getLogger(__name__)
 
 
 class TradingAPI:
@@ -29,7 +32,7 @@ class TradingAPI:
         try:
             from xtquant.xttrader import XtQuantTrader
         except ImportError:
-            print("[trading] xtquant 未安装，QMT 交易不可用。pip install quantseed[qmt]")
+            logger.warning("xtquant 未安装，QMT 交易不可用。pip install quantseed[qmt]")
             return False
 
         try:
@@ -41,7 +44,8 @@ class TradingAPI:
                 self._connected = True
                 return True
             return False
-        except Exception:
+        except Exception as e:
+            logger.error("QMT 连接失败: %s", e)
             self._connected = False
             return False
 
@@ -52,7 +56,8 @@ class TradingAPI:
             acc = StockAccount("")
             self.xt_trader.subscribe(acc)
             return acc
-        except Exception:
+        except Exception as e:
+            logger.warning("订阅账户失败: %s", e)
             return None
 
     @property
@@ -71,6 +76,7 @@ class TradingAPI:
             )
             return order_id, None
         except Exception as e:
+            logger.error("买入下单失败 %s: %s", code, e)
             return None, str(e)
 
     def order_sell(self, code, price, qty, strategy="quantseed"):
@@ -85,13 +91,15 @@ class TradingAPI:
             )
             return order_id, None
         except Exception as e:
+            logger.error("卖出下单失败 %s: %s", code, e)
             return None, str(e)
 
     def cancel_order(self, order_id):
         """撤单。"""
         try:
             return self.xt_trader.cancel_order_stock(self.account, order_id)
-        except Exception:
+        except Exception as e:
+            logger.warning("撤单失败 %s: %s", order_id, e)
             return None
 
     def query_positions(self):
@@ -100,7 +108,8 @@ class TradingAPI:
             return []
         try:
             return self.xt_trader.query_stock_positions(self.account)
-        except Exception:
+        except Exception as e:
+            logger.warning("查询持仓失败: %s", e)
             return []
 
     def query_asset(self):
@@ -109,7 +118,8 @@ class TradingAPI:
             return None
         try:
             return self.xt_trader.query_stock_asset(self.account)
-        except Exception:
+        except Exception as e:
+            logger.warning("查询资产失败: %s", e)
             return None
 
 

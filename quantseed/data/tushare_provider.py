@@ -36,27 +36,23 @@ class TushareProvider(DataProvider):
         start_date: str,
         end_date: str
     ) -> pd.DataFrame:
+        if not codes:
+            return pd.DataFrame()
         all_data = []
         for code in codes:
             try:
-                df = self._pro.daily(
+                # 使用 pro_bar 获取后复权数据，pro.daily 不支持 adj 参数
+                df = ts.pro_bar(
                     ts_code=self._to_ts_code(code),
                     start_date=start_date,
                     end_date=end_date,
                     adj='hfq'
                 )
-                if not df.empty:
+                if df is not None and not df.empty:
                     df['code'] = df['ts_code'].str[:6]
                     df = df.rename(columns={
-                        'trade_date': 'trade_date',
-                        'open': 'open',
-                        'close': 'close',
-                        'high': 'high',
-                        'low': 'low',
                         'vol': 'volume',
-                        'amount': 'amount',
                         'pct_chg': 'change_pct',
-                        'turnover_rate': 'turnover_rate'
                     })
                     all_data.append(df)
             except Exception as e:
@@ -70,12 +66,7 @@ class TushareProvider(DataProvider):
         if self._stock_basic_cache is None:
             df = self._pro.stock_basic(exchange='', list_status='L')
             df = df[['ts_code', 'symbol', 'name', 'list_date', 'delist_date']]
-            df = df.rename(columns={
-                'symbol': 'code',
-                'name': 'name',
-                'list_date': 'list_date',
-                'delist_date': 'delist_date'
-            })
+            df = df.rename(columns={'symbol': 'code'})
             df['code'] = df['code'].astype(str).str.zfill(6)
             self._stock_basic_cache = df
         df = self._stock_basic_cache
@@ -91,23 +82,26 @@ class TushareProvider(DataProvider):
         )
         if not df.empty:
             df = df.rename(columns={
-                'trade_date': 'trade_date',
-                'open': 'open',
-                'close': 'close',
-                'high': 'high',
-                'low': 'low',
                 'vol': 'volume',
-                'amount': 'amount',
-                'pct_chg': 'change_pct'
+                'pct_chg': 'change_pct',
             })
         return df
 
     def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
+        """获取基本面数据。
+
+        Args:
+            codes: 股票代码列表
+            date: 报告期，格式 YYYYMMDD（如 "20231231"）
+        """
+        if not codes:
+            return pd.DataFrame()
         all_data = []
         for code in codes:
             ts_code = self._to_ts_code(code)
             try:
-                df = self._pro.fina_indicator(ts_code=ts_code, start_date=date, end_date=date)
+                # fina_indicator 使用 period 参数指定报告期，而非 start_date/end_date
+                df = self._pro.fina_indicator(ts_code=ts_code, period=date)
                 if not df.empty:
                     df['code'] = code
                     all_data.append(df)

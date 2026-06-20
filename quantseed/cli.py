@@ -1,5 +1,4 @@
 """命令行入口。"""
-import sys
 import argparse
 
 
@@ -78,7 +77,11 @@ def _cmd_check(verbose=False):
             else:
                 print("  Tushare: Token 未设置")
         elif DATA_PROVIDER == "akshare":
-            print("  AkShare: 免费数据源，就绪")
+            if verbose:
+                codes = data.get_all_codes()
+                print(f"  AkShare: 免费数据源，可获取 {len(codes)} 只股票")
+            else:
+                print("  AkShare: 免费数据源，就绪")
     except Exception as e:
         print(f"  数据源异常: {e}")
 

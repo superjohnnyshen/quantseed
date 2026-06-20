@@ -95,8 +95,15 @@ class BaseStrategy:
         print(f"[{self.name}] {ts} - {msg}")
 
     def is_trading_day(self):
-        """判断是否为交易日。子类可覆盖实现更精确的判断。"""
-        return True
+        """判断今天是否为交易日。使用注入的数据接口查询交易日历。"""
+        if self.data is None:
+            return datetime.date.today().weekday() < 5
+        try:
+            today = datetime.date.today().strftime("%Y-%m-%d")
+            calendar = self.data.get_trade_calendar(today, today)
+            return today in calendar
+        except Exception:
+            return datetime.date.today().weekday() < 5
 
     def __str__(self):
         return f"<Strategy {self.name}>"

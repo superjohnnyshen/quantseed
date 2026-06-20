@@ -17,6 +17,8 @@ class AkShareProvider(DataProvider):
         start_date: str,
         end_date: str
     ) -> pd.DataFrame:
+        if not codes:
+            return pd.DataFrame()
         all_data = []
         for code in codes:
             try:
@@ -54,10 +56,6 @@ class AkShareProvider(DataProvider):
     def get_stock_basic(self, codes: Optional[List[str]] = None) -> pd.DataFrame:
         if self._stock_basic_cache is None:
             df = ak.stock_info_a_code_name()
-            df = df.rename(columns={
-                'code': 'code',
-                'name': 'name'
-            })
             df['code'] = df['code'].astype(str).str.zfill(6)
             self._stock_basic_cache = df
         df = self._stock_basic_cache
@@ -68,20 +66,22 @@ class AkShareProvider(DataProvider):
     def get_index_daily(self, index_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         df = ak.stock_zh_index_daily(symbol=index_code)
         if not df.empty:
-            df = df.rename(columns={
-                'date': 'trade_date',
-                'open': 'open',
-                'close': 'close',
-                'high': 'high',
-                'low': 'low',
-                'volume': 'volume',
-                'amount': 'amount'
-            })
-            df = df[(df['trade_date'] >= start_date) & (df['trade_date'] <= end_date)]
+            df = df.rename(columns={'date': 'trade_date'})
+            # 先转 str 再过滤，避免 datetime 与 str 比较失败
             df['trade_date'] = df['trade_date'].astype(str)
+            df = df[(df['trade_date'] >= start_date) & (df['trade_date'] <= end_date)]
         return df
 
     def get_fundamentals(self, codes: List[str], date: str) -> pd.DataFrame:
+        """获取基本面数据。
+
+        Args:
+            codes: 股票代码列表
+            date: 报告期（AkShare 的 sina 接口不支持按日期过滤，此参数暂忽略，
+                  返回最新可用报告。后续可切换到支持日期过滤的接口）
+        """
+        if not codes:
+            return pd.DataFrame()
         all_data = []
         for code in codes:
             try:

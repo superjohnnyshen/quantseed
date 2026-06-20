@@ -3,9 +3,9 @@
 三件套：SOP 方法论 + 多策略框架 + 数据管道。
 
 用法:
-    from quantseed import Strategy, Scheduler, DataProvider, config
+    from quantseed import BaseStrategy, Scheduler, DataProvider
 """
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 from .strategy_base import BaseStrategy
 from .scheduler import Scheduler

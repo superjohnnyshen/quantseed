@@ -22,6 +22,8 @@ class Scheduler:
         self._last_close_date = None
         self._last_eod_date = None
         self._running = True
+        self._trading_days_cache = None
+        self._trading_days_cache_date = None
 
     def register(self, strategy):
         """注册一个策略实例。"""
@@ -64,9 +66,12 @@ class Scheduler:
         只在交易日触发，周末/节假日自动跳过。
         支持 Ctrl+C 优雅退出。
         """
-        # 注册信号处理，支持优雅退出
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
+        # 注册信号处理，支持优雅退出（仅在主线程可用）
+        try:
+            signal.signal(signal.SIGINT, self._handle_shutdown)
+            signal.signal(signal.SIGTERM, self._handle_shutdown)
+        except ValueError:
+            pass  # 非主线程不支持 signal
 
         print(f"[scheduler] 启动: 共 {len(self.strategies)} 个策略")
         for s in self.strategies:
@@ -127,15 +132,28 @@ class Scheduler:
     def _is_trading_day(self, today: str, data) -> bool:
         """判断是否为交易日。
 
-        优先使用数据源的交易日历，如果数据源不可用则回退到简单的周末判断。
+        优先使用数据源的交易日历，缓存当天结果避免重复 API 调用。
+        如果数据源不可用则回退到简单的周末判断。
         """
+        # 缓存当天结果，避免每次循环都调用 API
+        if self._trading_days_cache_date == today:
+            return self._trading_days_cache
+
         if data is None:
-            return datetime.date.today().weekday() < 5
-        try:
-            calendar = data.get_trade_calendar(today, today)
-            return today in calendar
-        except Exception:
-            return datetime.date.today().weekday() < 5
+            result = datetime.date.today().weekday() < 5
+        else:
+            try:
+                # 拉取当月日历，减少 API 调用频率
+                month_start = today[:8] + "01"
+                month_end = today[:8] + "31"
+                calendar = data.get_trade_calendar(month_start, month_end)
+                result = today in calendar
+            except Exception:
+                result = datetime.date.today().weekday() < 5
+
+        self._trading_days_cache = result
+        self._trading_days_cache_date = today
+        return result
 
 
 def _import_strategy(strategy_dir: Path):

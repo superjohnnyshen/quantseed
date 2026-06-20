@@ -20,6 +20,14 @@ class StateStore:
         self._mtime = 0
 
     def load(self, default=None):
+        # 如果文件未修改，返回缓存
+        if (
+            self._cache is not None
+            and self.state_path.exists()
+            and self.state_path.stat().st_mtime == self._mtime
+        ):
+            return self._cache
+
         if not self.state_path.exists():
             return default if default is not None else {}
         try:

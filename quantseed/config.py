@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 
 DATA_PROVIDER = os.getenv("QUANTSEED_DATA_PROVIDER", "akshare")

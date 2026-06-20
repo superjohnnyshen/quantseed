@@ -46,31 +46,20 @@ class EquityTracker:
 
     @staticmethod
     def _append_csv(filepath: Path, row: list):
-        """原子追加一行：先写临时文件，再 replace 确保写入不损坏原文件。"""
-        # 读取已有内容
-        content = []
-        try:
-            if filepath.exists():
-                with open(filepath, "r", encoding="utf-8") as f:
-                    content = f.readlines()
-        except Exception:
-            pass
-
-        # 追加新行到内存
-        output = "".join(content)
-        output += ",".join(str(v) for v in row) + "\n"
-
-        # 原子写入
-        tmp = filepath.with_suffix(filepath.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(output)
-        os.replace(tmp, filepath)
+        """安全追加一行 CSV，使用 csv.writer 正确处理引号和逗号。"""
+        # 追加模式写入，O(1) 复杂度
+        with open(filepath, "a", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(row)
+            f.flush()
+            os.fsync(f.fileno())
 
     def get_last_equity(self):
         if not self.equity_path.exists():
             return None
         with open(self.equity_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        if len(lines) < 2:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        if not rows:
             return None
-        return lines[-1].strip().split(",")
+        return rows[-1]
