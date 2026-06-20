@@ -1,6 +1,7 @@
 import akshare as ak
 import pandas as pd
 import logging
+import time
 from typing import List, Optional
 from .interface import DataProvider
 
@@ -106,7 +107,6 @@ class AkShareProvider(DataProvider):
 
     def get_latest_price(self, code: str) -> float:
         # 缓存全市场实时行情 60 秒，避免每次调用都下载 5000+ 股票数据
-        import time
         now = time.time()
         if self._spot_cache is None or (now - self._spot_cache_time) > 60:
             df = ak.stock_zh_a_spot_em()

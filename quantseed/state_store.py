@@ -39,7 +39,8 @@ class StateStore:
             return default if default is not None else {}
 
     def save(self, data):
-        tmp = self.state_path.with_suffix(".json.tmp")
+        # 临时文件名 = 原文件名 + ".tmp"，确保与原文件同目录同后缀
+        tmp = self.state_path.with_name(self.state_path.name + ".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(self.state_path)  # 原子替换

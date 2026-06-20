@@ -103,7 +103,7 @@ class Scheduler:
                 self._last_open_date = today
 
             # 14:45 - 尾盘 on_close（买入建仓）
-            elif "14:45" <= hm <= "14:55" and today != self._last_close_date:
+            if "14:45" <= hm <= "14:55" and today != self._last_close_date:
                 for s in self.strategies:
                     try:
                         s.on_close(now)
@@ -112,7 +112,7 @@ class Scheduler:
                 self._last_close_date = today
 
             # 15:05 - 日终 on_eod（对账/净值）
-            elif "15:05" <= hm <= "15:15" and today != self._last_eod_date:
+            if "15:05" <= hm <= "15:15" and today != self._last_eod_date:
                 for s in self.strategies:
                     try:
                         s.on_eod(now)

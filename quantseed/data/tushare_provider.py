@@ -119,7 +119,18 @@ class TushareProvider(DataProvider):
 
     def get_latest_price(self, code: str) -> float:
         ts_code = self._to_ts_code(code)
-        df = self._pro.realtime_quote(ts_code=ts_code)
-        if not df.empty:
-            return float(df.iloc[0]['price'])
+        # realtime_quote 需要较高积分权限，降级使用最新日线收盘价
+        try:
+            df = self._pro.realtime_quote(ts_code=ts_code)
+            if not df.empty:
+                return float(df.iloc[0]['price'])
+        except Exception as e:
+            logger.debug("realtime_quote 不可用，降级使用最新日线: %s", e)
+        # 降级：取最新交易日收盘价
+        try:
+            df = self._pro.daily(ts_code=ts_code, limit=1)
+            if not df.empty:
+                return float(df.iloc[0]['close'])
+        except Exception as e:
+            logger.warning("获取 %s 最新价格失败: %s", code, e)
         return 0.0
