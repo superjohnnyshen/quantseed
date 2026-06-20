@@ -65,7 +65,9 @@ def _cmd_run(once=False):
 
     if not sched.strategies:
         print("未发现任何策略，请在 strategies/ 目录下创建策略。")
-        print("示例: 将 examples/demo_strategy/ 复制到 strategies/")
+        print("示例：")
+        print("  cp -r examples/demo_strategy/ strategies/      # 最小示例（买入持有+止损）")
+        print("  cp -r examples/dual_ma_strategy/ strategies/   # 双均线策略（含信号/仓位管理）")
         return
 
     sched.run(once=once)

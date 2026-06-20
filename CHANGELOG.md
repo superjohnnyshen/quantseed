@@ -2,6 +2,55 @@
 
 本文件记录 QuantSeed 的版本变更。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.2.0] - 2026-06-21
+
+### 🎯 主题：易用性大升级
+
+本次发布聚焦降低使用门槛，让写策略和跑回测更简单。
+
+### 新增
+
+**框架 API**
+- `BaseStrategy` 新增下单辅助方法：`buy` / `sell` / `sell_all` / `get_position` / `get_position_qty` / `get_cash` / `get_stock_value` / `get_total_equity` / `get_price`
+  - 策略不再需要手动管理 state + tracker + trader，代码量减半
+  - 实盘/回测同构：`buy/sell` 自动判断是否调用 trader
+- `BaseStrategy.trader` 属性：scheduler 自动注入交易接口
+- `BacktestResult.equity_chart()`：生成 ASCII 净值曲线图
+
+**CLI 命令**
+- `quantseed --version`：查看版本号
+- `quantseed backtest <strategy_dir>`：一键回测（支持 `--data`/`--start`/`--end`/`--capital`/`--warmup`）
+- `quantseed run --once`：调试模式，非交易时段也能立即执行钩子
+
+**文档**
+- `docs/api.md`：完整 API 参考文档（BaseStrategy / DataProvider / Backtester / StateStore / EquityTracker / CLI）
+- `examples/dual_ma_strategy/README.md`：示例说明
+- `examples/demo_strategy/prepare_data.py`：复用 dual_ma 数据
+
+### 改进
+
+**scheduler**
+- 异常打印完整 traceback（之前只打印消息，调试困难）
+- 交易日历查询加缓存，减少 API 调用
+
+**CLI check**
+- 检查 Python 依赖（pandas/numpy/akshare/tushare/pytest）
+- 输出加 `[OK]`/`[WARN]`/`[FAIL]` 图标区分严重性
+
+**示例**
+- `demo_strategy` 从空壳改为可运行的最小策略（买入持有 + 止损）
+- `dual_ma_strategy` 用新的 `buy/sell` 方法重写，代码更简洁
+- `backtest` 命令用 `run/` 子目录隔离回测产物，不污染策略源码
+
+**README**
+- 重写：git clone 安装、回测章节、API 示例、CLI 命令表
+- 项目结构更新
+
+### 验证
+- 90 个单元测试全绿
+- dual_ma 回测：+0.88%，夏普 1.814
+- demo 回测：5 次交易，建仓 → 止损 → 再建仓，框架工作正常
+
 ## [0.1.6] - 2026-06-21
 
 ### 新增

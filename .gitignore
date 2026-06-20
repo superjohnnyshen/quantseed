@@ -15,6 +15,7 @@ env/
 strategies/*/state.json
 strategies/*/trades.csv
 strategies/*/equity.csv
+examples/*/state.json
 examples/*/trades.csv
 examples/*/equity.csv
 examples/*/run/

@@ -5,7 +5,7 @@
 用法:
     from quantseed import BaseStrategy, Scheduler, DataProvider
 """
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 
 from .strategy_base import BaseStrategy
 from .scheduler import Scheduler
